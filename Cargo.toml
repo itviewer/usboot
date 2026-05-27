@@ -1,0 +1,18 @@
+[package]
+name = "usboot"
+version = "0.1.0"
+edition = "2024"
+
+description = "Universal USB Boot utilities for embedded platforms"
+license = "MIT"
+repository = "https://github.com/itviewer/usboot"
+
+[dependencies]
+nusb = { version = "0.2.3", features = ["tokio"] }
+thiserror = "2.0.18"
+tokio = { version = "1.52.3", features = ["time", "rt", "rt-multi-thread", "macros"] }
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+log = "0.4.29"
+env_logger = "0.11.10"
+rust-embed = "8.11.0"

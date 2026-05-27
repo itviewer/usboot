@@ -1,0 +1,75 @@
+name: Build
+on:
+  workflow_dispatch: { }
+jobs:
+  setup:
+    name: Setup
+    uses: ./.github/workflows/release-setup.yml
+
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        run: |
+          {
+            echo 'matrix<<EOF'
+            echo '{"include":[
+              {"os":"ubuntu-latest","bin":"boot-g12","archive-name":"boot-g12-linux-amd64.tar.gz","target":"x86_64-unknown-linux-musl"},
+              {"os":"ubuntu-22.04-arm","bin":"boot-g12","archive-name":"boot-g12-linux-arm64.tar.gz","target":"aarch64-unknown-linux-musl"},
+              {"os":"macos-latest","bin":"boot-g12","archive-name":"boot-g12-macOS-arm64.tar.gz","target":"aarch64-apple-darwin"},
+              {"os":"windows-latest","bin":"boot-g12","archive-name":"boot-g12-windows-amd64.7z","target":"x86_64-pc-windows-msvc"},
+              {"os":"ubuntu-latest","bin":"boot-gx","archive-name":"boot-gx-linux-amd64.tar.gz","target":"x86_64-unknown-linux-musl"},
+              {"os":"ubuntu-22.04-arm","bin":"boot-gx","archive-name":"boot-gx-linux-arm64.tar.gz","target":"aarch64-unknown-linux-musl"},
+              {"os":"macos-latest","bin":"boot-gx","archive-name":"boot-gx-macOS-arm64.tar.gz","target":"aarch64-apple-darwin"},
+              {"os":"windows-latest","bin":"boot-gx","archive-name":"boot-gx-windows-amd64.7z","target":"x86_64-pc-windows-msvc"}
+            ]}'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build binary
+        shell: bash
+        run: |
+          cargo build -v -r --target ${{ matrix.target }} --bin ${{ matrix.bin }}
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Build archive
+        shell: bash
+        run: |
+          mkdir archive
+          # ls -lR
+          if [[ "${{ matrix.os }}" == windows* ]]; then
+            cp "./target/${{ matrix.target }}/release/${{ matrix.bin }}.exe" ./archive/
+            cd archive
+            7z a "${{ matrix.archive-name }}" ${{ matrix.bin }}.exe
+          else
+            cp "./target/${{ matrix.target }}/release/${{ matrix.bin }}" ./archive/
+            cd archive
+            tar -czf "${{ matrix.archive-name }}" ${{ matrix.bin }}
+          fi
+
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: archive/${{ matrix.archive-name }}
+          tag_name: ${{ (github.ref_type == 'branch') && 'latest' || github.ref_name }}
+          prerelease: ${{ (github.ref_type == 'branch') && true || false }}
+          name: ${{ (github.ref_type == 'branch') && 'Latest build' || 'Release build' }} ${{ github.ref_name }}
